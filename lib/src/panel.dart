@@ -7,6 +7,7 @@ Licensing: More information can be found here: https://github.com/akshathjain/sl
 */
 
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 
 enum SlideDirection{
   UP,
@@ -90,13 +91,15 @@ class SlidingUpPanel extends StatefulWidget {
   /// between 0.0 and 1.0 where 0.0 is fully collapsed and 1.0 is fully open.
   final void Function(double position) onPanelSlide;
 
+  final bool Function() shouldSlide;
+
   /// If non-null, this callback is called when the
   /// panel is fully opened
-  final VoidCallback onPanelOpened;
+  final VoidCallback onPanelOpenedChanged;
 
   /// If non-null, this callback is called when the panel
   /// is fully collapsed.
-  final VoidCallback onPanelClosed;
+  final VoidCallback onPanelClosedChanged;
 
   /// If non-null and true, the SlidingUpPanel exhibits a
   /// parallax effect as the panel slides up. Essentially,
@@ -146,12 +149,13 @@ class SlidingUpPanel extends StatefulWidget {
     this.backdropOpacity = 0.5,
     this.backdropTapClosesPanel = true,
     this.onPanelSlide,
-    this.onPanelOpened,
-    this.onPanelClosed,
+    this.onPanelOpenedChanged,
+    this.onPanelClosedChanged,
     this.parallaxEnabled = false,
     this.parallaxOffset = 0.1,
     this.isDraggable = true,
-    this.slideDirection = SlideDirection.UP
+    this.slideDirection = SlideDirection.UP,
+    this.shouldSlide
   }) : assert(0 <= backdropOpacity && backdropOpacity <= 1.0),
        super(key: key);
 
@@ -162,12 +166,18 @@ class SlidingUpPanel extends StatefulWidget {
 class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProviderStateMixin{
 
   AnimationController _ac;
+  Map<int, VelocityTracker> _velocityTrackers;
 
   bool _isPanelVisible = true;
+
+  bool _isPanelFullyOpen = false;
+  bool _isPanelFullyClosed = true;
 
   @override
   void initState(){
     super.initState();
+
+    _velocityTrackers = new Map<int, VelocityTracker>();
 
     _ac = new AnimationController(
       vsync: this,
@@ -177,9 +187,22 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
 
       if(widget.onPanelSlide != null) widget.onPanelSlide(_ac.value);
 
-      if(widget.onPanelOpened != null && _ac.value == 1.0) widget.onPanelOpened();
+      if (_ac.value == 1.0 && !_isPanelFullyOpen) {
+        _isPanelFullyOpen = true;
+        if(widget.onPanelOpenedChanged != null) widget.onPanelOpenedChanged();
+      } else if (_ac.value < 1.0 && _isPanelFullyOpen) {
+        _isPanelFullyOpen = false;
+        if(widget.onPanelOpenedChanged != null) widget.onPanelOpenedChanged();
+      }
 
-      if(widget.onPanelClosed != null && _ac.value == 0.0) widget.onPanelClosed();
+      if (_ac.value == 0.0 && !_isPanelFullyClosed) {
+        _isPanelFullyClosed = true;
+        if(widget.onPanelClosedChanged != null) widget.onPanelClosedChanged();
+      } else if (_ac.value > 0.0 && _isPanelFullyClosed) {
+        _isPanelFullyClosed = false;
+        if(widget.onPanelClosedChanged != null) widget.onPanelClosedChanged();
+      }
+
     });
 
     widget.controller?._addListeners(
@@ -234,9 +257,21 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
 
 
         //the actual sliding part
-        !_isPanelVisible ? Container() : GestureDetector(
-          onVerticalDragUpdate: widget.isDraggable ? _onDrag : null,
-          onVerticalDragEnd: widget.isDraggable ? _onDragEnd : null,
+        !_isPanelVisible ? Container() : Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (PointerEvent ev) {
+            _velocityTrackers[ev.pointer] = new VelocityTracker();
+          },
+          onPointerMove: (PointerEvent ev) {
+            _velocityTrackers[ev.pointer].addPosition(ev.timeStamp, ev.localPosition);
+            var offset = Offset(0, ev.localDelta.dy);
+            _onDrag(DragUpdateDetails(delta: offset, primaryDelta: offset.dy));
+          },
+          onPointerUp: (PointerEvent ev) {
+            Velocity v = _velocityTrackers[ev.pointer].getVelocity();
+            _onDragEnd(DragEndDetails(velocity: v, primaryVelocity: v.pixelsPerSecond.dy));
+            _velocityTrackers.remove(ev.pointer);
+          },
           child: Container(
             height: _ac.value * (widget.maxHeight - widget.minHeight) + widget.minHeight,
             margin: widget.margin,
@@ -309,6 +344,10 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
   }
 
   void _onDrag(DragUpdateDetails details){
+
+    if (widget.shouldSlide != null && !widget.shouldSlide())
+      return;
+
     if(widget.slideDirection == SlideDirection.UP)
       _ac.value -= details.primaryDelta / (widget.maxHeight - widget.minHeight);
     else
@@ -316,6 +355,10 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
   }
 
   void _onDragEnd(DragEndDetails details){
+
+    if (widget.shouldSlide != null && !widget.shouldSlide())
+      return;
+
     double minFlingVelocity = 365.0;
 
     //let the current animation finish before starting a new one
@@ -536,13 +579,19 @@ class PanelController{
   /// Returns whether or not the
   /// panel is open.
   bool isPanelOpen(){
-    return _isPanelOpenListener();
+    if (_isPanelOpenListener != null)
+      return _isPanelOpenListener();
+    else
+      return false;
   }
 
   /// Returns whether or not the
   /// panel is closed.
   bool isPanelClosed(){
-    return _isPanelClosedListener();
+    if (_isPanelClosedListener != null)
+      return _isPanelClosedListener();
+    else
+      return true;
   }
 
   /// Returns whether or not the
