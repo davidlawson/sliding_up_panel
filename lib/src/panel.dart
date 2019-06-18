@@ -264,8 +264,8 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
             _velocityTrackers[ev.pointer] = new VelocityTracker();
           },
           onPointerMove: (PointerEvent ev) {
-            _velocityTrackers[ev.pointer].addPosition(ev.timeStamp, ev.localPosition);
-            var offset = Offset(0, ev.localDelta.dy);
+            _velocityTrackers[ev.pointer].addPosition(ev.timeStamp, ev.position);
+            var offset = Offset(0, ev.delta.dy);
             _onDrag(DragUpdateDetails(delta: offset, primaryDelta: offset.dy));
           },
           onPointerUp: (PointerEvent ev) {
