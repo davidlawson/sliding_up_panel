@@ -217,6 +217,7 @@ class _SlidingUpPanelState extends State<SlidingUpPanel> with SingleTickerProvid
       _isPanelOpen,
       _isPanelClosed,
       _isPanelShown,
+      _onDragEnd
     );
   }
 
@@ -495,6 +496,7 @@ class PanelController{
   bool Function() _isPanelOpenListener;
   bool Function() _isPanelClosedListener;
   bool Function() _isPanelShownListener;
+  void Function(DragEndDetails) _onDragEndListener;
 
   void _addListeners(
     VoidCallback closeListener,
@@ -508,6 +510,7 @@ class PanelController{
     bool Function() isPanelOpenListener,
     bool Function() isPanelClosedListener,
     bool Function() isPanelShownListener,
+    void Function(DragEndDetails) onDragEndListener,
   ){
     this._closeListener = closeListener;
     this._openListener = openListener;
@@ -520,6 +523,7 @@ class PanelController{
     this._isPanelOpenListener = isPanelOpenListener;
     this._isPanelClosedListener = isPanelClosedListener;
     this._isPanelShownListener = isPanelShownListener;
+    this._onDragEndListener = onDragEndListener;
   }
 
   /// Closes the sliding panel to its collapsed state (i.e. to the  minHeight)
@@ -598,6 +602,10 @@ class PanelController{
   /// panel is shown/hidden.
   bool isPanelShown(){
     return _isPanelShownListener();
+  }
+
+  void dragEnd(DragEndDetails details) {
+    _onDragEndListener(details);
   }
 
 }
